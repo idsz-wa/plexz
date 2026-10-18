@@ -100,14 +100,14 @@ plot_calibration <- function(signal, conc, unknown = NULL, method = "linear",
 
   plat <- get_platform(platform)
   sig_label <- plat$signal_label
-  if (is.null(main)) main <- sprintf("%s Calibration (%s)", plat$name, method)
+  if (is.null(main)) main <- sprintf("%s Calibration (%s)", plat$display_name, method)
 
   old_par <- par(no.readonly = TRUE)
   on.exit(par(old_par))
   par(mar = c(4.5, 4.5, 3, 1.5), las = 1)
 
-  xlab_txt <- if (log_x) sprintf("%s (%s, log scale)", sig_label, plat$name)
-              else sprintf("%s (%s)", sig_label, plat$name)
+  xlab_txt <- if (log_x) sprintf("%s (%s, log scale)", sig_label, plat$display_name)
+              else sprintf("%s (%s)", sig_label, plat$display_name)
 
   if (log_x) {
     plot(x_cal, y_cal, pch = 16, col = .msd_colors$standards, cex = 1.3,
