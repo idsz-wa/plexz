@@ -1,0 +1,29 @@
+Package: plexz
+Title: Multi-Platform Immunoassay Signal-to-Concentration Conversion
+Version: 3.1.0
+Authors@R: person("idsz.dai", role = c("aut", "cre"))
+Description: Converts raw immunoassay signal values into concentrations by
+    fitting and inverting calibration curves. Eight fitting methods are
+    available: linear, quadratic and cubic polynomials; log-linearised
+    logarithmic, power and exponential forms; and the four- and five-parameter
+    logistic models commonly used for sigmoidal dose-response data, the latter
+    two fitted by nonlinear least squares with convergence checking and
+    multiple starting values. Six detection platforms are predefined, each with
+    its own signal unit, expected signal range and preferred fitting methods,
+    covering Meso Scale Discovery, Luminex xMAP, ELISA, Simoa, cytometric bead
+    arrays and ELLA, and additional platforms can be registered at run time.
+    Calibration curves and unknown samples can be processed per factor for
+    multiplex assays, with a different model selectable for each factor, and
+    datasets from several platforms can be converted in a single call. Samples
+    are classified relative to the calibration range as within range, below or
+    above it, and detection limits (LLOQ and ULOQ) are reported, defined here
+    as the lowest and highest calibrator concentrations. Fit quality can be
+    compared across methods using R-squared and root mean squared error, and
+    calibration curves showing the fitted line, unknown samples, detection
+    limits and shaded out-of-range regions can be drawn and exported to PNG,
+    PDF, JPEG, TIFF or BMP. Only base R packages are used.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Depends: R (>= 3.5.0)
+Imports: stats, graphics, grDevices, tools
+RoxygenNote: 7.3.1
