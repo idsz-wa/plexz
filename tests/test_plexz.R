@@ -3,10 +3,14 @@
 # 测试覆盖: 基本拟合、检测上下限、多因子、边界情况、噪声鲁棒性、4PL/5PL
 
 script_dir <- tryCatch(dirname(normalizePath(sys.frame(1)$ofile)), error = function(e) getwd())
-pkg_dir <- file.path(dirname(script_dir), "R")
-if (!dir.exists(pkg_dir)) pkg_dir <- file.path(getwd(), "plexz", "R")
-if (!dir.exists(pkg_dir)) pkg_dir <- file.path(dirname(getwd()), "plexz", "R")
-for (f in sort(list.files(pkg_dir, full.names = TRUE))) source(f)
+if (identical(Sys.getenv("R_PACKAGE_NAME"), "plexz")) {
+  library(plexz)
+} else {
+  pkg_dir <- file.path(dirname(script_dir), "R")
+  if (!dir.exists(pkg_dir)) pkg_dir <- file.path(getwd(), "plexz", "R")
+  if (!dir.exists(pkg_dir)) pkg_dir <- file.path(dirname(getwd()), "plexz", "R")
+  for (f in sort(list.files(pkg_dir, full.names = TRUE))) source(f)
+}
 
 pass_count <- 0
 fail_count <- 0
@@ -306,6 +310,15 @@ assert(all(is.finite(res13$concentrations[c(1, 3)])), "有效样本浓度有限"
 assert(is.na(res13$concentrations[2]), "NA 信号预测浓度为 NA")
 assert(res13$status[2] == "unknown", "NA 信号标记为 unknown")
 cat("\n")
+
+res13b <- msd_to_concentration(c(1, 2, 3, 4), c(1, 2, 3, 4),
+                               c(NA, Inf, 2), method = "log")
+assert(identical(res13b$status, c("unknown", "unknown", "in_range")),
+       "log 方法的 NA/Inf 未知信号标记为 unknown")
+res13c <- msd_to_concentration(c(1, 2, 3, 4), c(1, 2, 3, 4),
+                               c(NA, Inf, 2), method = "power")
+assert(identical(res13c$status, c("unknown", "unknown", "in_range")),
+       "power 方法的 NA/Inf 未知信号标记为 unknown")
 
 # ─────────────────────────────────────────────
 # 第 14 轮: 绘图与保存
@@ -781,6 +794,72 @@ w37 <- tryCatch({
   NULL
 }, warning = function(w) conditionMessage(w), error = function(e) e$message)
 assert(!is.null(w37) && grepl("typical range", w37), "ELISA 传入 1e9 量级信号触发警告")
+cat("\n")
+
+# ─────────────────────────────────────────────
+# 第 38 轮: 非单调校准曲线使用完整观测范围
+# ─────────────────────────────────────────────
+cat("--- 第 38 轮: 非单调校准信号范围 ---\n")
+w38 <- tryCatch(compute_limits(c(100, 5000, 300, 1000), 1:4),
+                warning = function(w) conditionMessage(w))
+lim38 <- suppressWarnings(compute_limits(c(100, 5000, 300, 1000), 1:4))
+assert(grepl("not monotonic", w38), "非单调校准信号给出警告")
+assert(lim38$signal_lo == 100 && lim38$signal_hi == 5000,
+       "检测范围包含全部校准信号")
+err38 <- tryCatch(compute_limits(numeric(), numeric()), error = function(e) e$message)
+assert(grepl("At least 2", err38), "空检测限输入明确报错")
+err38b <- tryCatch(compute_limits(c(1, 2), c(5, 5)), error = function(e) e$message)
+assert(grepl("distinct concentration", err38b), "相同浓度无法定义检测限并明确报错")
+cat("\n")
+
+# ─────────────────────────────────────────────
+# 第 39 轮: 自定义平台注册方法校验与自动回退
+# ─────────────────────────────────────────────
+cat("--- 第 39 轮: 平台方法校验与自动回退 ---\n")
+err39 <- tryCatch(register_platform("badmethod", "Bad", "RFU",
+                                    recommended_methods = "missing"),
+                  error = function(e) e$message)
+assert(grepl("Unknown recommended method", err39), "未知推荐方法在注册时拒绝")
+register_platform("fallback", "Fallback", "RFU",
+                  recommended_methods = c("5pl", "linear"))
+res39 <- suppressMessages(convert_signal(1:5, 1:5, 3, platform = "fallback"))
+assert(res39$method == "linear", "拟合失败后自动尝试次选推荐方法")
+cat("\n")
+
+# ─────────────────────────────────────────────
+# 第 40 轮: 退化数据、NA 因子和非法方法输入
+# ─────────────────────────────────────────────
+cat("--- 第 40 轮: 输入边界校验 ---\n")
+err40a <- tryCatch(msd_multi_factor(
+  data.frame(factor = "A", signal = 1:3, concentration = 1:3),
+  data.frame(factor = NA_character_, signal = 2)), error = function(e) e$message)
+assert(grepl("factor must not contain NA", err40a), "NA 因子值明确拒绝")
+err40b <- tryCatch(msd_multi_factor(
+  data.frame(factor = "A", signal = 1:3, concentration = 1:3),
+  data.frame(factor = "A", signal = 2), method = c("linear", "log")),
+  error = function(e) e$message)
+assert(grepl("single method", err40b), "多元素方法向量明确拒绝")
+err40c <- tryCatch(fit_4pl(c(-1, 1, 2, 3, 4), 1:5), error = function(e) e$message)
+assert(grepl("> 0", err40c), "4PL 非正信号明确拒绝")
+cat("\n")
+
+# ─────────────────────────────────────────────
+# 第 41 轮: 多平台自动回退和绘图非法未知值
+# ─────────────────────────────────────────────
+cat("--- 第 41 轮: 多平台回退与绘图边界 ---\n")
+auto_batch <- multi_platform_convert(list(list(
+  calib_data = data.frame(factor = rep("A", 5), signal = 1:5, concentration = 1:5),
+  sample_data = data.frame(factor = "A", signal = 3), platform = "luminex")))
+assert(nrow(auto_batch) == 1 && auto_batch$status != "error" &&
+       auto_batch$method %in% c("4pl", "cubic"),
+       "多平台自动方法流程尝试可用后备模型")
+w41 <- tryCatch({
+  save_plot(file.path(tempdir(), "test_plot_invalid_unknown.pdf"),
+    plot_calibration(1:5, 1:5, c(-1, 3), method = "log"))
+  NULL
+}, warning = function(w) conditionMessage(w), error = function(e) e$message)
+assert(!is.null(w41) && grepl("non-positive unknown", w41),
+       "对数模型绘图剔除非正未知信号并警告")
 cat("\n")
 
 # ─────────────────────────────────────────────

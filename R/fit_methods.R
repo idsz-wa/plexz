@@ -1,4 +1,6 @@
 #' Linear fit: y = a + b*x
+#' @param signal numeric vector of calibration signal values
+#' @param conc numeric vector of known concentrations
 fit_linear <- function(signal, conc) {
   stopifnot(is.numeric(signal), is.numeric(conc), length(signal) == length(conc))
   model <- lm(conc ~ signal)
@@ -7,6 +9,8 @@ fit_linear <- function(signal, conc) {
 }
 
 #' Quadratic fit: y = a + b*x + c*x^2
+#' @param signal numeric vector of calibration signal values
+#' @param conc numeric vector of known concentrations
 fit_quadratic <- function(signal, conc) {
   stopifnot(is.numeric(signal), is.numeric(conc), length(signal) == length(conc))
   model <- lm(conc ~ poly(signal, 2, raw = TRUE))
@@ -15,6 +19,8 @@ fit_quadratic <- function(signal, conc) {
 }
 
 #' Cubic fit: y = a + b*x + c*x^2 + d*x^3
+#' @param signal numeric vector of calibration signal values
+#' @param conc numeric vector of known concentrations
 fit_cubic <- function(signal, conc) {
   stopifnot(is.numeric(signal), is.numeric(conc), length(signal) == length(conc))
   model <- lm(conc ~ poly(signal, 3, raw = TRUE))
@@ -23,18 +29,22 @@ fit_cubic <- function(signal, conc) {
 }
 
 #' Logarithmic fit: y = a + b*ln(x)
+#' @param signal numeric vector of calibration signal values
+#' @param conc numeric vector of known concentrations
 fit_log <- function(signal, conc) {
   stopifnot(is.numeric(signal), is.numeric(conc), length(signal) == length(conc))
   if (any(signal <= 0)) stop("Log fit requires all signal values > 0")
   model <- lm(conc ~ log(signal))
   list(model = model, name = "log",
        predict = function(s) {
-         if (any(s <= 0)) stop("Log fit requires prediction signal values > 0")
+         if (any(s <= 0, na.rm = TRUE)) stop("Log fit requires prediction signal values > 0")
          as.numeric(predict(model, newdata = data.frame(signal = s)))
        })
 }
 
 #' Power fit: y = a * x^b (linearized via log-log)
+#' @param signal numeric vector of calibration signal values
+#' @param conc numeric vector of known concentrations
 fit_power <- function(signal, conc) {
   stopifnot(is.numeric(signal), is.numeric(conc), length(signal) == length(conc))
   if (any(signal <= 0) || any(conc <= 0))
@@ -42,12 +52,14 @@ fit_power <- function(signal, conc) {
   model <- lm(log(conc) ~ log(signal))
   list(model = model, name = "power",
        predict = function(s) {
-         if (any(s <= 0)) stop("Power fit requires prediction signal values > 0")
+         if (any(s <= 0, na.rm = TRUE)) stop("Power fit requires prediction signal values > 0")
          exp(as.numeric(predict(model, newdata = data.frame(signal = s))))
        })
 }
 
 #' Exponential fit: y = a * exp(b*x) (linearized via log)
+#' @param signal numeric vector of calibration signal values
+#' @param conc numeric vector of known concentrations
 fit_exponential <- function(signal, conc) {
   stopifnot(is.numeric(signal), is.numeric(conc), length(signal) == length(conc))
   if (any(conc <= 0)) stop("Exponential fit requires all concentration values > 0")
@@ -59,6 +71,8 @@ fit_exponential <- function(signal, conc) {
 }
 
 #' Estimate 4PL initial parameters from data
+#' @param signal numeric vector of calibration signal values
+#' @param conc numeric vector of known concentrations
 .estimate_4pl_start <- function(signal, conc) {
   ord <- order(signal)
   sig_s <- signal[ord]
@@ -84,9 +98,13 @@ fit_exponential <- function(signal, conc) {
 }
 
 #' Four-parameter logistic (4PL): y = d + (a - d) / (1 + (x/c)^b)
+#' @param signal numeric vector of calibration signal values
+#' @param conc numeric vector of known concentrations
 fit_4pl <- function(signal, conc) {
   stopifnot(is.numeric(signal), is.numeric(conc), length(signal) == length(conc))
   if (length(signal) < 5) stop("4PL requires at least 5 data points")
+  if (any(!is.finite(signal)) || any(signal <= 0) || any(!is.finite(conc)))
+    stop("4PL requires finite concentrations and signal values > 0")
 
   st <- .estimate_4pl_start(signal, conc)
   df <- data.frame(signal = signal, conc = conc)
@@ -108,13 +126,21 @@ fit_4pl <- function(signal, conc) {
   if (is.null(model)) stop("4PL fitting failed to converge")
 
   list(model = model, name = "4pl",
-       predict = function(s) as.numeric(predict(model, newdata = data.frame(signal = s))))
+       predict = function(s) {
+         if (any(s <= 0, na.rm = TRUE))
+           stop("4PL prediction requires signal values > 0")
+         as.numeric(predict(model, newdata = data.frame(signal = s)))
+       })
 }
 
 #' Five-parameter logistic (5PL): y = d + (a - d) / (1 + (x/c)^b)^f
+#' @param signal numeric vector of calibration signal values
+#' @param conc numeric vector of known concentrations
 fit_5pl <- function(signal, conc) {
   stopifnot(is.numeric(signal), is.numeric(conc), length(signal) == length(conc))
   if (length(signal) < 6) stop("5PL requires at least 6 data points")
+  if (any(!is.finite(signal)) || any(signal <= 0) || any(!is.finite(conc)))
+    stop("5PL requires finite concentrations and signal values > 0")
 
   st <- .estimate_4pl_start(signal, conc)
   df <- data.frame(signal = signal, conc = conc)
@@ -140,5 +166,9 @@ fit_5pl <- function(signal, conc) {
   if (is.null(model)) stop("5PL fitting failed to converge")
 
   list(model = model, name = "5pl",
-       predict = function(s) as.numeric(predict(model, newdata = data.frame(signal = s))))
+       predict = function(s) {
+         if (any(s <= 0, na.rm = TRUE))
+           stop("5PL prediction requires signal values > 0")
+         as.numeric(predict(model, newdata = data.frame(signal = s)))
+       })
 }

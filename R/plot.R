@@ -23,6 +23,7 @@ plot_calibration <- function(signal, conc, unknown = NULL, method = "linear",
                              platform = "msd", main = NULL, log_x = FALSE,
                              show_limits = TRUE, show_grid = TRUE) {
   fit_fn <- get_method(method)
+  method <- tolower(trimws(method))
 
   ok <- !is.na(signal) & !is.na(conc) & is.finite(signal) & is.finite(conc)
   if (any(!ok)) {
@@ -78,12 +79,21 @@ plot_calibration <- function(signal, conc, unknown = NULL, method = "linear",
       x_unk <- numeric(0)
       unk_raw <- numeric(0)
     }
+    if (method %in% c("log", "power")) {
+      pos_u <- unk_raw > 0
+      if (any(!pos_u))
+        warning("Removed non-positive unknown signal point(s) required by the selected method")
+      x_unk <- x_unk[pos_u]
+      unk_raw <- unk_raw[pos_u]
+    }
     x_seq <- seq(min(x_cal), max(x_cal), length.out = 300)
     curve_raw <- x_seq
   }
 
   y_seq <- fit_result$predict(curve_raw)
   y_unk <- if (length(unk_raw) > 0) fit_result$predict(unk_raw) else numeric(0)
+  if (any(!is.finite(y_seq)) || any(!is.finite(y_unk)))
+    stop("Fitting produced non-finite plotting predictions")
 
   all_y <- c(y_cal, y_seq[is.finite(y_seq)])
   if (length(all_y) == 0) stop("No finite values available for plotting")

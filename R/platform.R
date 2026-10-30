@@ -97,6 +97,8 @@ list_platforms <- function() {
 #' @param platform character, platform name (case-insensitive)
 #' @return list with platform configuration
 get_platform <- function(platform) {
+  if (!is.character(platform) || length(platform) != 1 || is.na(platform))
+    stop("platform must be a single non-missing character value")
   platform <- tolower(trimws(platform))
   if (!platform %in% names(.platform_env$registry)) {
     stop(sprintf("Unknown platform '%s'. Available: %s",
@@ -119,13 +121,20 @@ register_platform <- function(name, full_name, signal_label, signal_unit = "",
                               typical_range = c(1, 1e6),
                               recommended_methods = c("4pl", "linear"),
                               description = "") {
+  if (!is.character(name) || length(name) != 1 || is.na(name))
+    stop("name must be a single non-missing character value")
   name <- tolower(trimws(name))
   if (nchar(name) == 0) stop("Platform name must not be empty")
   if (!is.numeric(typical_range) || length(typical_range) != 2 ||
+      any(!is.finite(typical_range)) ||
       typical_range[1] >= typical_range[2])
     stop("typical_range must be a numeric vector of length 2 with min < max")
   if (!is.character(recommended_methods) || length(recommended_methods) == 0)
     stop("recommended_methods must be a non-empty character vector")
+  recommended_methods <- tolower(trimws(recommended_methods))
+  invalid_methods <- setdiff(recommended_methods, names(.msd_methods))
+  if (length(invalid_methods) > 0)
+    stop("Unknown recommended method(s): ", paste(invalid_methods, collapse = ", "))
   if (!is.character(signal_label) || nchar(signal_label) == 0)
     stop("signal_label must be a non-empty string")
   if (!is.character(full_name) || nchar(full_name) == 0)

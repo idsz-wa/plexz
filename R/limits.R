@@ -4,17 +4,35 @@
 #' @param conc numeric vector of known concentrations
 #' @return list with LLOQ, ULOQ (concentration values), signal_lo, signal_hi, direction
 compute_limits <- function(signal, conc) {
+  if (!is.numeric(signal) || !is.numeric(conc) || length(signal) != length(conc))
+    stop("signal and conc must be numeric vectors of the same length")
+  keep <- is.finite(signal) & is.finite(conc)
+  if (sum(keep) < 2)
+    stop("At least 2 finite calibration points are required")
+  signal <- signal[keep]
+  conc <- conc[keep]
+  if (length(unique(conc)) < 2)
+    stop("At least 2 distinct concentration values are required")
+
   ord <- order(conc)
   conc_sorted <- conc[ord]
   signal_sorted <- signal[ord]
-  sig_at_lloq <- signal_sorted[1]
-  sig_at_uloq <- signal_sorted[length(signal_sorted)]
+  group_signal <- vapply(split(signal_sorted, conc_sorted), median, numeric(1))
+  sig_at_lloq <- group_signal[1]
+  sig_at_uloq <- group_signal[length(group_signal)]
   direction <- if (sig_at_uloq >= sig_at_lloq) "increasing" else "decreasing"
+
+  diffs <- diff(group_signal)
+  if (any(diffs != 0) && any(sign(diffs[diffs != 0]) !=
+                             if (direction == "increasing") 1 else -1)) {
+    warning("Calibration signals are not monotonic with concentration; using the observed signal range")
+  }
+
   list(
     LLOQ      = conc_sorted[1],
     ULOQ      = conc_sorted[length(conc_sorted)],
-    signal_lo = min(sig_at_lloq, sig_at_uloq),
-    signal_hi = max(sig_at_lloq, sig_at_uloq),
+    signal_lo = min(signal_sorted),
+    signal_hi = max(signal_sorted),
     direction = direction
   )
 }

@@ -22,6 +22,8 @@ msd_to_concentration <- function(signal, conc, unknown, method = "linear",
   }
   if (length(signal) < 3)
     stop("At least 3 calibration points are required")
+  if (length(unique(conc)) < 2)
+    stop("At least 2 distinct concentration values are required")
 
   if (!is.null(plat$typical_range) && length(plat$typical_range) == 2) {
     out_of_range <- sum(signal < plat$typical_range[1] | signal > plat$typical_range[2],
@@ -37,6 +39,11 @@ msd_to_concentration <- function(signal, conc, unknown, method = "linear",
   fit_fn <- get_method(method)
   fit_result <- fit_fn(signal, conc)
   predicted_conc <- fit_result$predict(unknown)
+  calibration_pred <- fit_result$predict(signal)
+  valid_unknown <- is.finite(unknown)
+  if (any(!is.finite(calibration_pred)) ||
+      any(!is.finite(predicted_conc[valid_unknown])))
+    stop("Fitting produced non-finite predictions")
   model_summary <- tryCatch(
     suppressWarnings(summary(fit_result$model)),
     error = function(e) NULL
@@ -78,12 +85,16 @@ convert_signal <- function(signal, conc, unknown, platform = "msd", method = NUL
 
   n_pts <- sum(!is.na(signal) & !is.na(conc) & is.finite(signal) & is.finite(conc))
 
+  failures <- character()
   for (m in plat$recommended_methods) {
     min_req <- if (m %in% names(.method_min_points)) .method_min_points[[m]] else 3
     if (n_pts < min_req) next
     res <- tryCatch(
       msd_to_concentration(signal, conc, unknown, method = m, platform = platform),
-      error = function(e) NULL
+      error = function(e) {
+        failures <<- c(failures, sprintf("%s: %s", m, e$message))
+        NULL
+      }
     )
     if (!is.null(res)) {
       message(sprintf("Platform '%s': auto-selected method '%s' (%d points available)",
@@ -93,8 +104,9 @@ convert_signal <- function(signal, conc, unknown, platform = "msd", method = NUL
   }
 
   stop(sprintf(
-    "Platform '%s': all recommended methods failed with %d valid points. Try specifying method manually.",
-    plat$display_name, n_pts))
+    "Platform '%s': all recommended methods failed with %d valid points%s. Try specifying method manually.",
+    plat$display_name, n_pts,
+    if (length(failures)) paste0(": ", paste(failures, collapse = "; ")) else ""))
 }
 
 #' Multi-factor signal-to-concentration conversion with detection limits
@@ -115,6 +127,10 @@ msd_multi_factor <- function(calib_data, sample_data, method = "linear",
     stop("calib_data must contain columns: ", paste(required_calib, collapse = ", "))
   if (!all(required_sample %in% names(sample_data)))
     stop("sample_data must contain columns: ", paste(required_sample, collapse = ", "))
+  if (anyNA(calib_data$factor) || anyNA(sample_data$factor))
+    stop("factor must not contain NA")
+  if (is.character(method) && length(method) != 1)
+    stop("method must be a single method name or a named list")
 
   plat <- get_platform(platform)
 
@@ -136,13 +152,18 @@ msd_multi_factor <- function(calib_data, sample_data, method = "linear",
       next
     }
 
-    m <- if (is.list(method) && f %in% names(method)) method[[f]]
+    m <- if (is.null(method)) NULL
+         else if (is.list(method) && f %in% names(method)) method[[f]]
          else if (is.character(method)) method
          else plat$recommended_methods[1]
 
     res <- tryCatch(
-      msd_to_concentration(cal_sub$signal, cal_sub$concentration, sam_sub$signal,
-                           method = m, platform = platform),
+      if (is.null(m))
+        convert_signal(cal_sub$signal, cal_sub$concentration, sam_sub$signal,
+                       platform = platform)
+      else
+        msd_to_concentration(cal_sub$signal, cal_sub$concentration, sam_sub$signal,
+                             method = m, platform = platform),
       error = function(e) {
         warning(sprintf("Factor '%s' fit failed (%s): %s", f, m, e$message))
         NULL
@@ -196,10 +217,6 @@ multi_platform_convert <- function(data_list) {
     p <- item$platform
 
     results[[i]] <- tryCatch({
-      if (is.null(m)) {
-        plat <- get_platform(p)
-        m <- plat$recommended_methods[1]
-      }
       res <- msd_multi_factor(item$calib_data, item$sample_data,
                               method = m, platform = p)
       res$batch <- batch_names[i]

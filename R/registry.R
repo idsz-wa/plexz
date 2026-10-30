@@ -26,7 +26,10 @@ list_methods <- function() {
 }
 
 #' Get fitting function by name
+#' @param method single fitting method name
 get_method <- function(method) {
+  if (!is.character(method) || length(method) != 1 || is.na(method))
+    stop("method must be a single non-missing character value")
   method <- tolower(trimws(method))
   if (!method %in% names(.msd_methods)) {
     stop(sprintf("Unknown method '%s'. Available: %s",

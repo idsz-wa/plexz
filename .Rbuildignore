@@ -1,4 +1,3 @@
 ^\.gitignore$
 ^\.Rbuildignore$
 ^README\.md$
-^tests$

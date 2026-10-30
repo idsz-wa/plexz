@@ -2,6 +2,8 @@ Package: plexz
 Title: Multi-Platform Immunoassay Signal-to-Concentration Conversion
 Version: 3.1.0
 Authors@R: person("idsz.dai", role = c("aut", "cre"), email = "dflovery@163.com")
+Author: idsz.dai [aut, cre]
+Maintainer: idsz.dai <dflovery@163.com>
 Description: Converts raw immunoassay signal values into concentrations by
     fitting and inverting calibration curves. Eight fitting methods are
     available: linear, quadratic and cubic polynomials; log-linearised
